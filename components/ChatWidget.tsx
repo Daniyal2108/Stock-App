@@ -1,16 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageCircle, X, Send, Bot, Star, Gift, Share2, Download, Briefcase } from 'lucide-react';
-import { ChatMessage, UserProfile, PortfolioItem } from '../types';
+import { ChatMessage, UserProfile } from '../types';
 import { chatWithAnalyst } from '../services/geminiService';
 
 interface ChatWidgetProps {
   chatCount: number;
   incrementChat: () => void;
   user: UserProfile | null;
-  portfolio: PortfolioItem[];
 }
 
-const ChatWidget: React.FC<ChatWidgetProps> = ({ chatCount, incrementChat, user, portfolio }) => {
+const ChatWidget: React.FC<ChatWidgetProps> = ({ chatCount, incrementChat, user }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: '1', role: 'model', text: `Hello ${user?.name?.split(' ')[0] || 'Trader'}! I am DK, your personal Financial Advisor. I see your profile is set to '${user?.riskTolerance || 'General'}'. How can I help optimize your strategy today?`, timestamp: new Date() }
@@ -52,8 +51,8 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ chatCount, incrementChat, user,
         parts: [{ text: m.text }]
     }));
 
-    // Pass User Context and Portfolio to Service
-    const responseText = await chatWithAnalyst(history, userMsg.text, user, portfolio);
+    // Pass User Context to Service
+    const responseText = await chatWithAnalyst(history, userMsg.text, user);
     
     setIsTyping(false);
     const aiMsg: ChatMessage = { id: (Date.now() + 1).toString(), role: 'model', text: responseText, timestamp: new Date() };
@@ -82,18 +81,18 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ chatCount, incrementChat, user,
       {/* Floating Button */}
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 bg-market-accent hover:bg-blue-600 text-white p-4 rounded-full shadow-lg shadow-blue-500/30 transition-all hover:scale-110 z-40 flex items-center gap-2 group"
+        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 bg-market-accent hover:bg-blue-600 text-white p-3 sm:p-4 rounded-full shadow-lg shadow-blue-500/30 transition-all hover:scale-110 z-40 flex items-center gap-2 group"
       >
         <div className="relative">
-          <Briefcase className="group-hover:hidden" />
-          <MessageCircle className="hidden group-hover:block" />
+          <Briefcase size={isOpen ? 20 : 24} className="group-hover:hidden" />
+          <MessageCircle size={isOpen ? 20 : 24} className="hidden group-hover:block" />
         </div>
-        <span className="font-semibold hidden md:inline">DK Advisor</span>
+        <span className="font-semibold hidden sm:inline text-sm sm:text-base">DK Advisor</span>
       </button>
 
       {/* Chat Window */}
       {isOpen && (
-        <div className="fixed bottom-24 right-6 w-[90vw] md:w-[400px] h-[500px] bg-market-card border border-slate-700 rounded-2xl shadow-2xl flex flex-col z-40 overflow-hidden">
+        <div className="fixed bottom-20 sm:bottom-24 right-2 sm:right-6 w-[calc(100vw-1rem)] sm:w-[90vw] md:w-[400px] h-[calc(100vh-6rem)] sm:h-[500px] max-h-[600px] bg-market-card border border-slate-700 rounded-2xl shadow-2xl flex flex-col z-40 overflow-hidden">
           {/* Header */}
           <div className="bg-slate-900 p-4 border-b border-slate-700 flex justify-between items-center">
             <div className="flex items-center gap-2">
@@ -128,7 +127,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ chatCount, incrementChat, user,
                  <div className="bg-slate-800 text-slate-400 rounded-2xl p-3 text-xs italic border border-slate-700 flex items-center gap-2">
                     <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce"></div>
                     <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce delay-100"></div>
-                    Analysing portfolio...
+                    Analysing market...
                  </div>
               </div>
             )}
@@ -143,7 +142,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ chatCount, incrementChat, user,
                  value={input}
                  onChange={(e) => setInput(e.target.value)}
                  onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                 placeholder="Advice on current holdings..."
+                 placeholder="Ask about market analysis..."
                  className="flex-1 bg-slate-800 border-none rounded-lg px-4 py-2 text-sm text-white focus:ring-1 focus:ring-market-accent outline-none"
                />
                <button onClick={handleSend} className="bg-market-accent p-2 rounded-lg text-white hover:bg-blue-600 transition-colors">

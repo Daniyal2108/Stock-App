@@ -1,4 +1,4 @@
-export type ViewState = 'dashboard' | 'stocks' | 'options' | 'crypto' | 'forex' | 'analytics' | 'alerts' | 'portfolio';
+export type ViewState = 'dashboard' | 'stocks' | 'options' | 'crypto' | 'forex' | 'analytics' | 'alerts';
 export type TimeRange = '1D' | '1W' | '1M' | '3M' | '1Y';
 export type RiskTolerance = 'Conservative' | 'Balanced' | 'Aggressive' | 'Speculative';
 
@@ -8,14 +8,6 @@ export interface UserProfile {
   riskTolerance: RiskTolerance;
   goal: string; // e.g., "Retirement", "Lambo", "Steady Income"
   balance: number; // Cash Balance
-}
-
-export interface PortfolioItem {
-  symbol: string;
-  avgPrice: number;
-  quantity: number;
-  currentPrice: number; // For calculation convenience
-  type: 'stock' | 'crypto' | 'forex';
 }
 
 export interface MarketAlert {

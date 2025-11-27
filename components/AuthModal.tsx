@@ -1,64 +1,71 @@
 import React, { useState } from 'react';
-import { UserProfile, RiskTolerance } from '../types';
+import { RiskTolerance } from '../types';
 import { ShieldCheck, Mail, Lock, User as UserIcon, ArrowRight, Target, TrendingUp, Terminal, Play } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface AuthModalProps {
-  onLogin: (user: UserProfile) => void;
+  onClose?: () => void;
 }
 
-const AuthModal: React.FC<AuthModalProps> = ({ onLogin }) => {
+const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
+  const { login, signup } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirm, setPasswordConfirm] = useState('');
   const [risk, setRisk] = useState<RiskTolerance>('Balanced');
   const [goal, setGoal] = useState('Wealth Accumulation');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
     
-    // Simulate API Call
-    setTimeout(() => {
-      onLogin({
-        name: name || 'DK Trader',
-        email: email,
-        riskTolerance: risk,
-        goal: goal,
-        balance: 100000, // Starting Paper Money
-      });
+    try {
+      if (isLogin) {
+        await login(email, password);
+        onClose?.();
+      } else {
+        if (password !== passwordConfirm) {
+          setError('Passwords do not match');
+          setLoading(false);
+          return;
+        }
+        await signup(name, email, password, passwordConfirm, risk, goal);
+        onClose?.();
+      }
+    } catch (err: any) {
+      setError(err.message || 'Authentication failed');
+    } finally {
       setLoading(false);
-    }, 1500);
+    }
   };
 
   // --- AUTOMATION SCRIPT ---
-  const executeLoginScript = () => {
-    // 1. Reset State
+  const executeLoginScript = async () => {
     setIsLogin(true);
     setLoading(true);
+    setError(null);
 
-    // 2. Simulate Input Automation
     const demoUser = {
         email: "admin_script@dkwealth.ai",
         pass: "superuser_auth_token_x99"
     };
 
-    // Visual feedback of script typing
     setEmail(demoUser.email);
     setPassword(demoUser.pass);
 
-    // 3. Execute Login logic after short delay
-    setTimeout(() => {
-        onLogin({
-            name: "DK Auto Admin",
-            email: demoUser.email,
-            riskTolerance: 'Aggressive',
-            goal: 'Market Domination',
-            balance: 1000000, // VIP Balance
-        });
-        setLoading(false);
-    }, 800);
+    try {
+      await login(demoUser.email, demoUser.pass);
+      onClose?.();
+    } catch (err: any) {
+      setError(err.message || 'Auto login failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -171,6 +178,29 @@ const AuthModal: React.FC<AuthModalProps> = ({ onLogin }) => {
               />
             </div>
           </div>
+
+          {!isLogin && (
+            <div className="space-y-1">
+              <label className="text-xs text-slate-400 ml-1">Confirm Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 text-slate-500" size={18} />
+                <input 
+                  type="password" 
+                  required 
+                  value={passwordConfirm}
+                  onChange={(e) => setPasswordConfirm(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-white focus:ring-2 focus:ring-market-accent outline-none transition-all"
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm p-3 rounded-lg">
+              {error}
+            </div>
+          )}
 
           <button 
             type="submit" 
