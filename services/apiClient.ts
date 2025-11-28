@@ -9,7 +9,7 @@ import axios, {
 const getApiBaseUrl = (): string => {
   const envUrl = import.meta.env.VITE_API_URL;
 
-  // If no env URL, use default
+  // If no env URL, use localhost for development
   if (!envUrl) {
     return "http://localhost:5000/api/v1";
   }

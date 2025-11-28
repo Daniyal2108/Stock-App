@@ -38,7 +38,8 @@ export const marketService = {
       return response.data.marketData || [];
     } catch (error: any) {
       console.error('Error fetching market data:', error);
-      throw error;
+      // Return empty array instead of throwing to allow fallback
+      return [];
     }
   },
 

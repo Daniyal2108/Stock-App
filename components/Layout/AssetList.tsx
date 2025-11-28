@@ -1,15 +1,33 @@
 import React, { memo, useMemo } from 'react';
 import { Search, Briefcase } from 'lucide-react';
 import { MarketData } from '../../types';
+import { SkeletonListItem, EmptyState } from '../UI';
 
 interface AssetListProps {
   data: MarketData[];
   title: string;
   selectedSymbol: string;
   onAssetSelect: (asset: MarketData) => void;
+  loading?: boolean;
 }
 
-const AssetList: React.FC<AssetListProps> = memo(({ data, title, selectedSymbol, onAssetSelect }) => {
+const AssetList: React.FC<AssetListProps> = memo(({ data, title, selectedSymbol, onAssetSelect, loading = false }) => {
+
+  if (loading) {
+    return (
+      <div className="bg-market-card rounded-xl border border-slate-700 overflow-hidden h-full flex flex-col shadow-xl">
+        <div className="p-4 border-b border-slate-700 font-semibold text-slate-300 flex justify-between items-center">
+          <span>{title}</span>
+          <Search size={16} className="text-slate-500"/>
+        </div>
+        <div className="divide-y divide-slate-800 overflow-y-auto flex-1 custom-scrollbar">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <SkeletonListItem key={i} />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (data.length === 0) {
     return (
@@ -18,7 +36,13 @@ const AssetList: React.FC<AssetListProps> = memo(({ data, title, selectedSymbol,
           <span>{title}</span>
           <Search size={16} className="text-slate-500"/>
         </div>
-        <div className="p-4 text-center text-slate-500 text-sm">No assets found.</div>
+        <div className="p-4 flex-1 flex items-center justify-center">
+          <EmptyState
+            title="No assets found"
+            description="Try adjusting your search or filters"
+            icon={<Search size={24} className="text-slate-500" />}
+          />
+        </div>
       </div>
     );
   }

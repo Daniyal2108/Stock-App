@@ -1,116 +1,187 @@
-import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
-import { MarketData, CandleData } from '../types';
-import { MOCK_STOCKS, MOCK_CRYPTO, MOCK_FOREX, generateChartData } from '../constants';
-import { fetchTopCoins, fetchRealForexRates, fetchRealStockPrices } from '../services/marketDataService';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useMemo,
+  ReactNode,
+  useEffect,
+} from "react";
+import { MarketData, CandleData } from "../types";
+import { marketService } from "../services/marketService";
 
 interface MarketContextType {
   marketData: MarketData[];
-  selectedAsset: MarketData;
+  selectedAsset: MarketData | null;
   chartData: CandleData[];
   setSelectedAsset: (asset: MarketData) => void;
   updateChartData: (points?: number) => void;
   refreshMarketData: () => Promise<void>;
-  getFilteredAssets: (type?: 'stock' | 'crypto' | 'forex', searchQuery?: string) => MarketData[];
+  getFilteredAssets: (
+    type?: "stock" | "crypto" | "forex",
+    searchQuery?: string
+  ) => MarketData[];
+  loading: boolean;
 }
 
 const MarketContext = createContext<MarketContextType | undefined>(undefined);
 
-export const MarketProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [marketData, setMarketData] = useState<MarketData[]>([...MOCK_STOCKS, ...MOCK_CRYPTO, ...MOCK_FOREX]);
-  const [selectedAsset, setSelectedAssetState] = useState<MarketData>(MOCK_STOCKS[0]);
-  const [chartData, setChartData] = useState<CandleData[]>(generateChartData(MOCK_STOCKS[0].price));
+// Default empty asset to prevent errors
+const DEFAULT_ASSET: MarketData = {
+  symbol: "LOADING",
+  name: "Loading...",
+  price: 0,
+  change: 0,
+  changePercent: 0,
+  volume: "0",
+  type: "stock",
+};
 
-  const updateChartData = useCallback((points: number = 50) => {
-    setChartData(generateChartData(selectedAsset.price, points));
-  }, [selectedAsset.price]);
+export const MarketProvider: React.FC<{ children: ReactNode }> = ({
+  children,
+}) => {
+  const [marketData, setMarketData] = useState<MarketData[]>([]);
+  const [selectedAsset, setSelectedAssetState] = useState<MarketData | null>(
+    null
+  );
+  const [chartData, setChartData] = useState<CandleData[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const setSelectedAsset = useCallback((asset: MarketData) => {
+  const updateChartData = useCallback(
+    async (timeRange: string = "1D") => {
+      if (!selectedAsset) return;
+
+      try {
+        const candleData = await marketService.getCandleData(
+          selectedAsset.symbol,
+          timeRange
+        );
+        if (candleData && candleData.length > 0) {
+          setChartData(candleData);
+        }
+      } catch (error) {
+        console.error("Failed to update chart data:", error);
+      }
+    },
+    [selectedAsset]
+  );
+
+  const setSelectedAsset = useCallback(async (asset: MarketData) => {
     setSelectedAssetState(asset);
-    setChartData(generateChartData(asset.price));
+    // Fetch real candle data from API
+    try {
+      const candleData = await marketService.getCandleData(asset.symbol, "1D");
+      if (candleData && candleData.length > 0) {
+        setChartData(candleData);
+        return;
+      }
+    } catch (error) {
+      console.error("Failed to fetch candle data:", error);
+      setChartData([]);
+    }
   }, []);
 
   const refreshMarketData = useCallback(async () => {
+    setLoading(true);
     try {
-      // Try to fetch from API first, fallback to mock data
-      try {
-        const { marketService } = await import('../services/marketService');
-        const apiData = await marketService.getMarketData();
-        if (apiData && apiData.length > 0) {
-          setMarketData(apiData);
-          return;
-        }
-      } catch (apiError) {
-        console.warn('API not available, using mock data:', apiError);
+      // Fetch all market data from backend API
+      const apiData = await marketService.getMarketData();
+
+      if (apiData && apiData.length > 0) {
+        setMarketData(apiData);
+
+        // Set first asset as selected if none selected
+        setSelectedAssetState((prevAsset) => {
+          if (!prevAsset && apiData.length > 0) {
+            const firstAsset = apiData[0];
+            // Fetch candle data for first asset
+            marketService
+              .getCandleData(firstAsset.symbol, "1D")
+              .then((candleData) => {
+                if (candleData && candleData.length > 0) {
+                  setChartData(candleData);
+                }
+              })
+              .catch((error) => {
+                console.error("Failed to fetch initial candle data:", error);
+              });
+            return firstAsset;
+          } else if (prevAsset) {
+            // Update selected asset if it exists in new data
+            const updatedAsset = apiData.find(
+              (a) => a.symbol === prevAsset.symbol
+            );
+            return updatedAsset || prevAsset;
+          }
+          return prevAsset;
+        });
       }
-
-      // Fallback to existing logic
-      const topCoins = await fetchTopCoins();
-      const forexRates = await fetchRealForexRates();
-      const stockSymbols = MOCK_STOCKS.map(s => s.symbol);
-      const realStockPrices = await fetchRealStockPrices(stockSymbols);
-
-      setMarketData(prevData => {
-        const stocks = prevData.filter(a => a.type === 'stock').map(stock => {
-          if (realStockPrices[stock.symbol]) {
-            return {
-              ...stock,
-              price: realStockPrices[stock.symbol]!.price,
-              change: realStockPrices[stock.symbol]!.change,
-              changePercent: realStockPrices[stock.symbol]!.changePercent,
-            };
-          }
-          return stock;
-        });
-
-        const cryptos = topCoins.length > 0 ? topCoins : prevData.filter(a => a.type === 'crypto');
-
-        const forex = prevData.filter(a => a.type === 'forex').map(asset => {
-          if (forexRates[asset.symbol]) {
-            return { ...asset, price: forexRates[asset.symbol]! };
-          }
-          return asset;
-        });
-
-        return [...stocks, ...cryptos, ...forex];
-      });
-    } catch (error) {
-      console.error('Failed to refresh market data:', error);
+    } catch (apiError) {
+      console.error("Failed to fetch market data:", apiError);
+      // Don't set mock data - just show empty state
+      setMarketData([]);
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  }, []); // Remove selectedAsset from dependencies to prevent infinite loop
 
-  const getFilteredAssets = useCallback((type?: 'stock' | 'crypto' | 'forex', searchQuery?: string) => {
-    let data = marketData;
-    if (type) {
-      data = data.filter(a => a.type === type);
-    }
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      data = data.filter(a => 
-        a.symbol.toLowerCase().includes(q) || 
-        a.name.toLowerCase().includes(q)
-      );
-    }
-    return data;
-  }, [marketData]);
+  // Initial data fetch on mount - only once
+  useEffect(() => {
+    refreshMarketData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - only run on mount
 
-  const value = useMemo(() => ({
-    marketData,
-    selectedAsset,
-    chartData,
-    setSelectedAsset,
-    updateChartData,
-    refreshMarketData,
-    getFilteredAssets,
-  }), [marketData, selectedAsset, chartData, setSelectedAsset, updateChartData, refreshMarketData, getFilteredAssets]);
+  const getFilteredAssets = useCallback(
+    (type?: "stock" | "crypto" | "forex", searchQuery?: string) => {
+      let data = marketData;
+      if (type) {
+        data = data.filter((a) => a.type === type);
+      }
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        data = data.filter(
+          (a) =>
+            a.symbol.toLowerCase().includes(q) ||
+            a.name.toLowerCase().includes(q)
+        );
+      }
+      return data;
+    },
+    [marketData]
+  );
 
-  return <MarketContext.Provider value={value}>{children}</MarketContext.Provider>;
+  const value = useMemo(
+    () => ({
+      marketData,
+      selectedAsset: selectedAsset || DEFAULT_ASSET,
+      chartData,
+      setSelectedAsset,
+      updateChartData,
+      refreshMarketData,
+      getFilteredAssets,
+      loading,
+    }),
+    [
+      marketData,
+      selectedAsset,
+      chartData,
+      setSelectedAsset,
+      updateChartData,
+      refreshMarketData,
+      getFilteredAssets,
+      loading,
+    ]
+  );
+
+  return (
+    <MarketContext.Provider value={value}>{children}</MarketContext.Provider>
+  );
 };
 
 export const useMarket = () => {
   const context = useContext(MarketContext);
   if (!context) {
-    throw new Error('useMarket must be used within MarketProvider');
+    throw new Error("useMarket must be used within MarketProvider");
   }
   return context;
 };
-

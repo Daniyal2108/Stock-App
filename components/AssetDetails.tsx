@@ -1,13 +1,24 @@
 import React from 'react';
 import { MarketData } from '../types';
 import { Building2, TrendingUp, DollarSign, Activity } from 'lucide-react';
-import { StatCard } from './UI';
+import { StatCard, SkeletonStatCard } from './UI';
 
 interface AssetDetailsProps {
   asset: MarketData;
+  loading?: boolean;
 }
 
-const AssetDetails: React.FC<AssetDetailsProps> = ({ asset }) => {
+const AssetDetails: React.FC<AssetDetailsProps> = ({ asset, loading = false }) => {
+  if (loading) {
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <SkeletonStatCard key={i} />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
       <StatCard

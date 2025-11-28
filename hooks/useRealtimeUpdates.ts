@@ -1,45 +1,55 @@
-import { useEffect, useRef } from 'react';
-import { useMarket } from '../contexts/MarketContext';
-import { CandleData } from '../types';
+import { useEffect, useRef } from "react";
+import { useMarket } from "../contexts/MarketContext";
 
 export const useRealtimeUpdates = () => {
-  const { selectedAsset, chartData, updateChartData } = useMarket();
+  const { selectedAsset, refreshMarketData, updateChartData } = useMarket();
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const refreshMarketDataRef = useRef(refreshMarketData);
+  const updateChartDataRef = useRef(updateChartData);
+  const selectedAssetRef = useRef(selectedAsset);
+  const isUpdatingRef = useRef(false); // Prevent concurrent updates
+
+  // Keep refs updated
+  useEffect(() => {
+    refreshMarketDataRef.current = refreshMarketData;
+    updateChartDataRef.current = updateChartData;
+    selectedAssetRef.current = selectedAsset;
+  }, [refreshMarketData, updateChartData, selectedAsset]);
 
   useEffect(() => {
-    if (selectedAsset.type === 'stock') return; // Stocks use API updates
-
-    intervalRef.current = setInterval(() => {
-      // Update chart data for crypto/forex
-      const lastCandle = chartData[chartData.length - 1];
-      if (!lastCandle) return;
-
-      const volatility = lastCandle.close * 0.001;
-      const move = (Math.random() - 0.5) * volatility;
-      const newClose = lastCandle.close + move;
-
-      const updatedCandle: CandleData = {
-        ...lastCandle,
-        close: newClose,
-        high: Math.max(lastCandle.high, newClose),
-        low: Math.min(lastCandle.low, newClose),
-        volume: lastCandle.volume + Math.floor(Math.random() * 100),
-      };
-
-      // 5% chance to create a new candle
-      if (Math.random() > 0.95) {
-        const newCandle: CandleData = {
-          ...updatedCandle,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          open: newClose,
-        };
-        // This would need to be handled by context
+    // Refresh market data every 30 seconds (increased to reduce API calls)
+    // Chart data updates less frequently to avoid rate limits
+    intervalRef.current = setInterval(async () => {
+      // Prevent concurrent updates
+      if (isUpdatingRef.current) {
+        return;
       }
-    }, 1000);
+
+      try {
+        isUpdatingRef.current = true;
+        await refreshMarketDataRef.current();
+
+        // Also refresh chart data if asset is selected (less frequently)
+        const currentAsset = selectedAssetRef.current;
+        if (currentAsset && currentAsset.symbol !== "LOADING") {
+          // Only update chart data every 3rd cycle (every 90 seconds)
+          const shouldUpdateChart = Math.random() < 0.33; // 33% chance
+          if (shouldUpdateChart) {
+            await updateChartDataRef.current("1D");
+          }
+        }
+      } catch (error) {
+        console.error("Error in real-time update:", error);
+      } finally {
+        isUpdatingRef.current = false;
+      }
+    }, 30000); // Update every 30 seconds (reduced frequency)
 
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     };
-  }, [selectedAsset.type, chartData, updateChartData]);
+  }, []); // Empty deps - interval only created once
 };
-

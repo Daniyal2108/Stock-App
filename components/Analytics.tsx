@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { MarketData } from '../types';
-import { StatCard, Card, Badge } from './UI';
+import { StatCard, Card, Badge, SkeletonStatCard, SkeletonCard, SkeletonChart, SkeletonTable } from './UI';
 import { formatCurrency, formatPercentage, formatLargeNumber } from '../utils/helpers';
 import { CHART_COLORS } from '../utils/constants';
 import { TrendingUp, TrendingDown, Activity, DollarSign, BarChart3, PieChart as PieChartIcon, ArrowUpRight, ArrowDownRight } from 'lucide-react';
@@ -9,9 +9,10 @@ import { useMediaQuery } from '../hooks/useMediaQuery';
 
 interface AnalyticsProps {
   marketData: MarketData[];
+  loading?: boolean;
 }
 
-const Analytics: React.FC<AnalyticsProps> = ({ marketData }) => {
+const Analytics: React.FC<AnalyticsProps> = ({ marketData, loading = false }) => {
   const [selectedTimeRange, setSelectedTimeRange] = useState<'1D' | '1W' | '1M' | '3M' | '1Y'>('1M');
   const isMobile = useMediaQuery('(max-width: 768px)');
 

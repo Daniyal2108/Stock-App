@@ -1,9 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { Bell, Plus, Trash2, TrendingUp, TrendingDown, X, Sparkles, Target, Zap } from 'lucide-react';
-import { MarketAlert, MarketData } from '../types';
-import { Button, Badge } from './UI';
-import { formatCurrency } from '../utils/helpers';
-import { useMediaQuery } from '../hooks/useMediaQuery';
+import React, { useState, useEffect, useRef } from "react";
+import {
+  Bell,
+  Plus,
+  Trash2,
+  TrendingUp,
+  TrendingDown,
+  X,
+  Sparkles,
+  Target,
+  Zap,
+} from "lucide-react";
+import { MarketAlert, MarketData } from "../types";
+import { Button, Badge, SkeletonCard, SkeletonListItem, Skeleton } from "./UI";
+import { formatCurrency } from "../utils/helpers";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 
 interface AlertManagerProps {
   currentAsset: MarketData;
@@ -13,20 +23,23 @@ interface AlertManagerProps {
   loading?: boolean;
 }
 
-const AlertManager: React.FC<AlertManagerProps> = ({ 
-  currentAsset, 
-  alerts, 
-  onAddAlert, 
+const AlertManager: React.FC<AlertManagerProps> = ({
+  currentAsset,
+  alerts,
+  onAddAlert,
   onRemoveAlert,
-  loading = false
+  loading = false,
 }) => {
-  const [targetPrice, setTargetPrice] = useState<string>(currentAsset.price.toFixed(2));
-  const [condition, setCondition] = useState<'above' | 'below'>('above');
+  const [targetPrice, setTargetPrice] = useState<string>(
+    currentAsset.price.toFixed(2)
+  );
+  const [condition, setCondition] = useState<"above" | "below">("above");
   const [showForm, setShowForm] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
-  const isMobile = useMediaQuery('(max-width: 768px)');
-  const isTablet = useMediaQuery('(max-width: 1024px)');
+  const isMobile = useMediaQuery("(max-width: 768px)");
+  const isTablet = useMediaQuery("(max-width: 1024px)");
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Update target price when asset changes
   useEffect(() => {
@@ -37,43 +50,94 @@ const AlertManager: React.FC<AlertManagerProps> = ({
     const price = parseFloat(targetPrice);
     if (isNaN(price) || price <= 0) return;
 
+    // Clear any existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
     setIsAnimating(true);
     const newAlert: MarketAlert = {
       id: Date.now().toString(),
       symbol: currentAsset.symbol,
       targetPrice: price,
       condition,
-      active: true
+      active: true,
     };
     onAddAlert(newAlert);
     setShowForm(false);
     setShowModal(false);
     setTargetPrice(currentAsset.price.toFixed(2));
-    
-    setTimeout(() => setIsAnimating(false), 500);
+
+    timeoutRef.current = setTimeout(() => setIsAnimating(false), 500);
   };
 
-  const assetAlerts = alerts.filter(a => a.symbol === currentAsset.symbol);
-  const activeAlerts = assetAlerts.filter(a => a.active);
-  const triggeredAlerts = assetAlerts.filter(a => !a.active);
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
-  const priceDifference = Math.abs(parseFloat(targetPrice) - currentAsset.price);
-  const pricePercent = ((priceDifference / currentAsset.price) * 100).toFixed(1);
+  const assetAlerts = alerts.filter((a) => a.symbol === currentAsset.symbol);
+  const activeAlerts = assetAlerts.filter((a) => a.active);
+  const triggeredAlerts = assetAlerts.filter((a) => !a.active);
+
+  if (loading) {
+    return (
+      <div className="bg-market-card rounded-xl border border-slate-700 p-4 sm:p-6 shadow-xl">
+        <div className="mb-4">
+          <Skeleton variant="text" width="40%" height={24} className="mb-2" />
+          <Skeleton variant="text" width="60%" height={16} />
+        </div>
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <SkeletonCard
+              key={i}
+              showHeader={false}
+              showContent
+              showFooter={false}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const priceDifference = Math.abs(
+    parseFloat(targetPrice) - currentAsset.price
+  );
+  const pricePercent = ((priceDifference / currentAsset.price) * 100).toFixed(
+    1
+  );
 
   // Alert Form Component (Reusable)
   const AlertForm = ({ isModal = false }: { isModal?: boolean }) => (
-    <div className={`${isModal ? 'bg-slate-900' : 'bg-gradient-to-br from-slate-800/90 to-slate-900/90'} ${isModal ? 'p-6' : 'p-4 sm:p-5'} border-2 border-market-accent/30 rounded-xl ${isModal ? '' : 'mb-4 sm:mb-5'} animate-in slide-in-from-top duration-300 shadow-xl shadow-blue-500/10`}>
+    <div
+      className={`${
+        isModal
+          ? "bg-slate-900"
+          : "bg-gradient-to-br from-slate-800/90 to-slate-900/90"
+      } ${
+        isModal ? "p-6" : "p-4 sm:p-5"
+      } border-2 border-market-accent/30 rounded-xl ${
+        isModal ? "" : "mb-4 sm:mb-5"
+      } animate-in slide-in-from-top duration-300 shadow-xl shadow-blue-500/10`}
+    >
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <div className="p-2 bg-market-accent/20 rounded-lg">
             <Target size={isMobile ? 16 : 18} className="text-market-accent" />
           </div>
           <div>
-            <span className="text-sm sm:text-base font-bold text-white">Create Alert</span>
+            <span className="text-sm sm:text-base font-bold text-white">
+              Create Alert
+            </span>
             <p className="text-xs text-slate-400">for {currentAsset.symbol}</p>
           </div>
-      </div>
-        <button 
+        </div>
+        <button
           onClick={() => {
             setShowForm(false);
             setShowModal(false);
@@ -88,22 +152,22 @@ const AlertManager: React.FC<AlertManagerProps> = ({
         {/* Condition Selector */}
         <div className="grid grid-cols-2 gap-2 sm:gap-3">
           <button
-            onClick={() => setCondition('above')}
+            onClick={() => setCondition("above")}
             className={`flex items-center justify-center gap-2 p-2.5 sm:p-3 rounded-lg border-2 transition-all text-sm sm:text-base ${
-              condition === 'above'
-                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-lg shadow-emerald-500/20'
-                : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'
+              condition === "above"
+                ? "bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-lg shadow-emerald-500/20"
+                : "bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600"
             }`}
           >
             <TrendingUp size={isMobile ? 16 : 18} />
             <span className="font-semibold">Above</span>
           </button>
           <button
-            onClick={() => setCondition('below')}
+            onClick={() => setCondition("below")}
             className={`flex items-center justify-center gap-2 p-2.5 sm:p-3 rounded-lg border-2 transition-all text-sm sm:text-base ${
-              condition === 'below'
-                ? 'bg-rose-500/20 border-rose-500 text-rose-400 shadow-lg shadow-rose-500/20'
-                : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'
+              condition === "below"
+                ? "bg-rose-500/20 border-rose-500 text-rose-400 shadow-lg shadow-rose-500/20"
+                : "bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600"
             }`}
           >
             <TrendingDown size={isMobile ? 16 : 18} />
@@ -113,11 +177,15 @@ const AlertManager: React.FC<AlertManagerProps> = ({
 
         {/* Price Input */}
         <div className="relative">
-          <label className="block text-xs sm:text-sm text-slate-400 mb-2">Target Price</label>
+          <label className="block text-xs sm:text-sm text-slate-400 mb-2">
+            Target Price
+          </label>
           <div className="relative">
-            <span className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-slate-400 text-base sm:text-lg font-bold">$</span>
-            <input 
-              type="number" 
+            <span className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-slate-400 text-base sm:text-lg font-bold">
+              $
+            </span>
+            <input
+              type="number"
               step="0.01"
               value={targetPrice}
               onChange={(e) => setTargetPrice(e.target.value)}
@@ -135,17 +203,21 @@ const AlertManager: React.FC<AlertManagerProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div className="flex items-center gap-2">
               <Zap size={isMobile ? 12 : 14} className="text-amber-400" />
-              <span className="text-xs sm:text-sm text-slate-400">Current:</span>
-              <span className="text-sm sm:text-base font-bold text-white">{formatCurrency(currentAsset.price)}</span>
+              <span className="text-xs sm:text-sm text-slate-400">
+                Current:
+              </span>
+              <span className="text-sm sm:text-base font-bold text-white">
+                {formatCurrency(currentAsset.price)}
+              </span>
             </div>
             {priceDifference > 0 && (
               <span className="text-xs sm:text-sm text-slate-500">
-                {condition === 'above' ? '↑' : '↓'} {pricePercent}% away
+                {condition === "above" ? "↑" : "↓"} {pricePercent}% away
               </span>
             )}
           </div>
         </div>
-        
+
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-2">
           <Button
@@ -187,7 +259,9 @@ const AlertManager: React.FC<AlertManagerProps> = ({
                 <span className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-500 rounded-full animate-ping"></span>
               )}
             </div>
-            <h3 className="text-sm sm:text-base md:text-lg font-bold text-white truncate">Price Alerts</h3>
+            <h3 className="text-sm sm:text-base md:text-lg font-bold text-white truncate">
+              Price Alerts
+            </h3>
             {activeAlerts.length > 0 && (
               <Badge variant="info" size="sm" className="flex-shrink-0">
                 {activeAlerts.length}
@@ -230,35 +304,46 @@ const AlertManager: React.FC<AlertManagerProps> = ({
               </div>
               <div className="space-y-2">
                 {activeAlerts.map((alert, index) => (
-                  <div 
-                    key={alert.id} 
+                  <div
+                    key={alert.id}
                     className={`flex justify-between items-center bg-gradient-to-r from-emerald-500/10 to-emerald-500/5 border border-emerald-500/30 p-2.5 sm:p-3 rounded-lg hover:border-emerald-500/50 transition-all ${
-                      isAnimating && index === activeAlerts.length - 1 ? 'animate-in slide-in-from-right' : ''
+                      isAnimating && index === activeAlerts.length - 1
+                        ? "animate-in slide-in-from-right"
+                        : ""
                     }`}
                   >
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <div className={`p-1.5 rounded-lg flex-shrink-0 ${
-                        alert.condition === 'above' 
-                          ? 'bg-emerald-500/20' 
-                          : 'bg-rose-500/20'
-                      }`}>
-                        {alert.condition === 'above' ? (
-                          <TrendingUp size={isMobile ? 12 : 14} className="text-emerald-400" />
+                      <div
+                        className={`p-1.5 rounded-lg flex-shrink-0 ${
+                          alert.condition === "above"
+                            ? "bg-emerald-500/20"
+                            : "bg-rose-500/20"
+                        }`}
+                      >
+                        {alert.condition === "above" ? (
+                          <TrendingUp
+                            size={isMobile ? 12 : 14}
+                            className="text-emerald-400"
+                          />
                         ) : (
-                          <TrendingDown size={isMobile ? 12 : 14} className="text-rose-400" />
+                          <TrendingDown
+                            size={isMobile ? 12 : 14}
+                            className="text-rose-400"
+                          />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-xs text-slate-300 truncate">
-                          {alert.condition === 'above' ? 'Above' : 'Below'}
+                          {alert.condition === "above" ? "Above" : "Below"}
                         </div>
                         <div className="font-mono font-bold text-white text-xs sm:text-sm truncate">
-                          {alert.condition === 'above' ? '≥' : '≤'} {formatCurrency(alert.targetPrice)}
+                          {alert.condition === "above" ? "≥" : "≤"}{" "}
+                          {formatCurrency(alert.targetPrice)}
                         </div>
                       </div>
                     </div>
-                    <button 
-                      onClick={() => onRemoveAlert(alert.id)} 
+                    <button
+                      onClick={() => onRemoveAlert(alert.id)}
                       className="text-slate-500 hover:text-red-500 transition-colors p-1.5 hover:bg-red-500/10 rounded-lg flex-shrink-0 ml-2"
                       title="Delete alert"
                     >
@@ -278,30 +363,37 @@ const AlertManager: React.FC<AlertManagerProps> = ({
                 Triggered ({triggeredAlerts.length})
               </div>
               <div className="space-y-2">
-                {triggeredAlerts.map(alert => (
-                  <div 
-                    key={alert.id} 
+                {triggeredAlerts.map((alert) => (
+                  <div
+                    key={alert.id}
                     className="flex justify-between items-center bg-slate-800/30 border border-slate-700 p-2.5 sm:p-3 rounded-lg opacity-70"
                   >
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <div className="p-1.5 rounded-lg bg-slate-700/50 flex-shrink-0">
-                        {alert.condition === 'above' ? (
-                          <TrendingUp size={isMobile ? 12 : 14} className="text-slate-500" />
+                        {alert.condition === "above" ? (
+                          <TrendingUp
+                            size={isMobile ? 12 : 14}
+                            className="text-slate-500"
+                          />
                         ) : (
-                          <TrendingDown size={isMobile ? 12 : 14} className="text-slate-500" />
+                          <TrendingDown
+                            size={isMobile ? 12 : 14}
+                            className="text-slate-500"
+                          />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-xs text-slate-500 truncate">
-                          {alert.condition === 'above' ? 'Above' : 'Below'}
+                          {alert.condition === "above" ? "Above" : "Below"}
                         </div>
                         <div className="font-mono text-slate-500 text-xs sm:text-sm truncate">
-                          {alert.condition === 'above' ? '≥' : '≤'} {formatCurrency(alert.targetPrice)}
+                          {alert.condition === "above" ? "≥" : "≤"}{" "}
+                          {formatCurrency(alert.targetPrice)}
                         </div>
                       </div>
                     </div>
-                    <button 
-                      onClick={() => onRemoveAlert(alert.id)} 
+                    <button
+                      onClick={() => onRemoveAlert(alert.id)}
                       className="text-slate-600 hover:text-red-500 transition-colors p-1.5 hover:bg-red-500/10 rounded-lg flex-shrink-0 ml-2"
                       title="Delete alert"
                     >
@@ -322,9 +414,7 @@ const AlertManager: React.FC<AlertManagerProps> = ({
               <p className="text-xs sm:text-sm text-slate-400 mb-1 font-medium">
                 No alerts for {currentAsset.symbol}
               </p>
-              <p className="text-xs text-slate-600">
-                Get notified instantly
-              </p>
+              <p className="text-xs text-slate-600">Get notified instantly</p>
             </div>
           )}
         </div>
@@ -332,11 +422,17 @@ const AlertManager: React.FC<AlertManagerProps> = ({
 
       {/* Modal for Mobile/Tablet */}
       {showModal && (isMobile || isTablet) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setShowModal(false)}>
-          <div className="bg-slate-900 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          onClick={() => setShowModal(false)}
+        >
+          <div
+            className="bg-slate-900 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <AlertForm isModal={true} />
-      </div>
-    </div>
+          </div>
+        </div>
       )}
     </>
   );

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useContext } from 'react';
+import { useState, useEffect, useCallback, useContext, useRef } from 'react';
 import { MarketAlert } from '../types';
 import { useMarket } from '../contexts/MarketContext';
 import { AuthContext } from '../contexts/AuthContext';
@@ -10,6 +10,7 @@ export const useAlerts = () => {
   const [notifications, setNotifications] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const { marketData } = useMarket();
+  const notificationTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   
   // Safely get user from auth context
   const authContext = useContext(AuthContext);
@@ -105,16 +106,43 @@ export const useAlerts = () => {
   }, [user]);
 
   const triggerNotification = useCallback((msg: string) => {
+    // Clear existing timeout for this message if any
+    const existingTimeout = notificationTimeoutsRef.current.get(msg);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+    }
+
     setNotifications(prev => [...prev, msg]);
-    setTimeout(() => setNotifications(prev => prev.filter(n => n !== msg)), 5000);
+    
+    // Auto-remove notification after 5 seconds with cleanup
+    const timeoutId = setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n !== msg));
+      notificationTimeoutsRef.current.delete(msg);
+    }, 5000);
+    
+    notificationTimeoutsRef.current.set(msg, timeoutId);
     
     // Browser notification if permission granted
     if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification('Price Alert', {
-        body: msg,
-        icon: '/favicon.ico',
-      });
+      try {
+        new Notification('Price Alert', {
+          body: msg,
+          icon: '/favicon.ico',
+        });
+      } catch (error) {
+        console.warn('Failed to show browser notification:', error);
+      }
     }
+  }, []);
+
+  // Cleanup all timeouts on unmount
+  useEffect(() => {
+    return () => {
+      notificationTimeoutsRef.current.forEach((timeout) => {
+        clearTimeout(timeout);
+      });
+      notificationTimeoutsRef.current.clear();
+    };
   }, []);
 
   const removeNotification = useCallback((notification: string) => {

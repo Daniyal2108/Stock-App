@@ -19,7 +19,7 @@ import Notifications from "./components/Layout/Notifications";
 import AuthModal from "./components/AuthModal";
 import ChatWidget from "./components/ChatWidget";
 import { getMarketAnalysis } from "./services/geminiService";
-import { generateChartData, generateOptionsChain } from "./constants";
+import { generateOptionsChain } from "./constants";
 import {
   formatCurrency,
   formatPercentage,
@@ -27,7 +27,15 @@ import {
   generateCSV,
   filterAssets,
 } from "./utils/helpers";
-import { LoadingSpinner, EmptyState } from "./components/UI";
+import {
+  LoadingSpinner,
+  EmptyState,
+  SkeletonCard,
+  SkeletonListItem,
+  SkeletonStatCard,
+  SkeletonChart,
+  SkeletonText,
+} from "./components/UI";
 
 // Lazy load heavy components
 const FinancialChart = lazy(() => import("./components/FinancialChart"));
@@ -45,29 +53,8 @@ const AppContent: React.FC = () => {
   const [chatCount, setChatCount] = useState(0);
   const [aiAnalysis, setAiAnalysis] = useState<string>("");
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
-  const [news] = useState<NewsItem[]>([
-    {
-      id: "1",
-      headline: "Fed signals rate cuts may come sooner than expected",
-      source: "MarketWatch",
-      time: "10m ago",
-      sentiment: "positive",
-    },
-    {
-      id: "2",
-      headline: "Tech sector faces volatility amidst earnings week",
-      source: "Bloomberg",
-      time: "25m ago",
-      sentiment: "neutral",
-    },
-    {
-      id: "3",
-      headline: "Crypto markets rally as Bitcoin breaks resistance",
-      source: "CoinDesk",
-      time: "1h ago",
-      sentiment: "positive",
-    },
-  ]);
+  const [news, setNews] = useState<NewsItem[]>([]);
+  const [newsLoading, setNewsLoading] = useState(true);
 
   const { user, login, logout } = useAuth();
   const {
@@ -77,6 +64,7 @@ const AppContent: React.FC = () => {
     setSelectedAsset,
     updateChartData,
     getFilteredAssets,
+    loading: marketLoading,
   } = useMarket();
   const {
     alerts,
@@ -90,6 +78,22 @@ const AppContent: React.FC = () => {
 
   useMarketData();
   useRealtimeUpdates();
+
+  // Fetch news from API
+  useEffect(() => {
+    const fetchNews = async () => {
+      try {
+        const { newsService } = await import("./services/newsService");
+        const newsData = await newsService.getNews(10);
+        setNews(newsData);
+      } catch (error) {
+        console.error("Failed to fetch news:", error);
+      } finally {
+        setNewsLoading(false);
+      }
+    };
+    fetchNews();
+  }, []);
 
   // Listen for auth logout events from API interceptor
   useEffect(() => {
@@ -120,10 +124,7 @@ const AppContent: React.FC = () => {
 
   const handleTimeRangeChange = useCallback(
     (range: TimeRange) => {
-      let points = 50;
-      if (range === "1W") points = 100;
-      if (range === "1M") points = 150;
-      updateChartData(points);
+      updateChartData(range);
     },
     [updateChartData]
   );
@@ -146,17 +147,19 @@ const AppContent: React.FC = () => {
     triggerNotification("📄 Report Downloaded!");
   }, [marketData, triggerNotification]);
 
+  // Filter assets by current view type - stocks only in stocks, crypto only in crypto, etc.
   const filteredAssets = useMemo(() => {
-    const assetType =
-      currentView === "stocks"
-        ? "stock"
-        : currentView === "crypto"
-        ? "crypto"
-        : currentView === "forex"
-        ? "forex"
-        : undefined;
-    return filterAssets(marketData, assetType, searchQuery);
-  }, [currentView, searchQuery, marketData]);
+    if (currentView === "stocks") {
+      return getFilteredAssets("stock", searchQuery);
+    } else if (currentView === "crypto") {
+      return getFilteredAssets("crypto", searchQuery);
+    } else if (currentView === "forex") {
+      return getFilteredAssets("forex", searchQuery);
+    } else {
+      // Dashboard shows all
+      return getFilteredAssets(undefined, searchQuery);
+    }
+  }, [currentView, marketData, searchQuery, getFilteredAssets]);
 
   const renderChartSection = useCallback(
     () => (
@@ -178,46 +181,55 @@ const AppContent: React.FC = () => {
           <div className="text-left sm:text-right w-full sm:w-auto">
             <div className="text-3xl sm:text-4xl font-mono text-white tracking-tighter transition-all duration-300">
               $
-              {selectedAsset.price.toLocaleString(undefined, {
+              {(selectedAsset.price || 0).toLocaleString(undefined, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 4,
               })}
             </div>
             <div
               className={`text-base sm:text-lg font-bold flex items-center sm:justify-end gap-1 ${
-                selectedAsset.changePercent >= 0
+                (selectedAsset.changePercent || 0) >= 0
                   ? "text-market-up"
                   : "text-market-down"
               }`}
             >
-              {selectedAsset.changePercent > 0 ? "↑" : "↓"}
-              {selectedAsset.change.toFixed(2)} (
-              {selectedAsset.changePercent.toFixed(2)}%)
+              {(selectedAsset.changePercent || 0) > 0 ? "↑" : "↓"}
+              {(selectedAsset.change || 0).toFixed(2)} (
+              {(selectedAsset.changePercent || 0).toFixed(2)}%)
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
           <div className="lg:col-span-3 flex flex-col gap-4 sm:gap-6">
-            <Suspense fallback={<LoadingSpinner />}>
-              <FinancialChart
-                data={chartData}
-                symbol={selectedAsset.symbol}
-                onRangeChange={handleTimeRangeChange}
-              />
-              <AssetDetails asset={selectedAsset} />
-            </Suspense>
+            {chartData.length === 0 ? (
+              <>
+                <SkeletonChart />
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <SkeletonStatCard key={i} />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <FinancialChart
+                  data={chartData}
+                  symbol={selectedAsset.symbol}
+                  onRangeChange={handleTimeRangeChange}
+                />
+                <AssetDetails asset={selectedAsset} />
+              </>
+            )}
           </div>
           <div className="lg:col-span-1 flex flex-col gap-4 sm:gap-6">
-            <Suspense fallback={<LoadingSpinner />}>
-              <AlertManager
-                currentAsset={selectedAsset}
-                alerts={alerts}
-                onAddAlert={addAlert}
-                onRemoveAlert={removeAlert}
-                loading={alertsLoading}
-              />
-            </Suspense>
+            <AlertManager
+              currentAsset={selectedAsset}
+              alerts={alerts}
+              onAddAlert={addAlert}
+              onRemoveAlert={removeAlert}
+              loading={alertsLoading}
+            />
           </div>
         </div>
 
@@ -259,40 +271,50 @@ const AppContent: React.FC = () => {
           📰 Market News
         </h3>
         <div className="space-y-4 flex-1 overflow-y-auto custom-scrollbar pr-2">
-          {news.map((n) => (
-            <div
-              key={n.id}
-              className="border-b border-slate-800 pb-3 last:border-0"
-            >
-              <div className="flex justify-between items-start mb-1">
-                <span className="text-xs text-slate-500">
-                  {n.source} • {n.time}
-                </span>
-                <span
-                  className={`text-xs ${
-                    n.sentiment === "positive"
-                      ? "text-emerald-500"
-                      : n.sentiment === "negative"
-                      ? "text-rose-500"
-                      : "text-amber-500"
-                  }`}
-                >
-                  {n.sentiment === "positive"
-                    ? "↑"
-                    : n.sentiment === "negative"
-                    ? "↓"
-                    : "→"}
-                </span>
-              </div>
-              <p className="text-sm text-slate-300 hover:text-white cursor-pointer transition-colors leading-tight">
-                {n.headline}
-              </p>
+          {newsLoading ? (
+            <div className="text-center py-4">
+              <div className="text-slate-500 text-sm">Loading news...</div>
             </div>
-          ))}
+          ) : news.length === 0 ? (
+            <div className="text-center py-4">
+              <div className="text-slate-500 text-sm">No news available</div>
+            </div>
+          ) : (
+            news.map((n) => (
+              <div
+                key={n.id}
+                className="border-b border-slate-800 pb-3 last:border-0"
+              >
+                <div className="flex justify-between items-start mb-1">
+                  <span className="text-xs text-slate-500">
+                    {n.source} • {n.time}
+                  </span>
+                  <span
+                    className={`text-xs ${
+                      n.sentiment === "positive"
+                        ? "text-emerald-500"
+                        : n.sentiment === "negative"
+                        ? "text-rose-500"
+                        : "text-amber-500"
+                    }`}
+                  >
+                    {n.sentiment === "positive"
+                      ? "↑"
+                      : n.sentiment === "negative"
+                      ? "↓"
+                      : "→"}
+                  </span>
+                </div>
+                <p className="text-sm text-slate-300 hover:text-white cursor-pointer transition-colors leading-tight">
+                  {n.headline}
+                </p>
+              </div>
+            ))
+          )}
         </div>
       </div>
     ),
-    [news]
+    [news, newsLoading]
   );
 
   return (
@@ -352,6 +374,7 @@ const AppContent: React.FC = () => {
                     title={`Top ${currentView}`}
                     selectedSymbol={selectedAsset.symbol}
                     onAssetSelect={handleAssetSelect}
+                    loading={marketLoading}
                   />
                 </div>
                 <div className="lg:col-span-3 space-y-4 sm:space-y-6 order-1 lg:order-2">
@@ -383,12 +406,13 @@ const AppContent: React.FC = () => {
                       title="Underlying Assets"
                       selectedSymbol={selectedAsset.symbol}
                       onAssetSelect={handleAssetSelect}
+                      loading={marketLoading}
                     />
                   </div>
                   <div className="lg:col-span-2">
                     <Suspense fallback={<LoadingSpinner />}>
                       <OptionsChain
-                        chain={generateOptionsChain(selectedAsset.price)}
+                        chain={generateOptionsChain(selectedAsset.price || 0)}
                         symbol={selectedAsset.symbol}
                       />
                     </Suspense>
